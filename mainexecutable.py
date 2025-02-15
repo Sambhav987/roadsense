@@ -192,6 +192,11 @@ def create_ui():
         count2=0
         count3=0
         count4=0
+        idcount=0
+        idcount1=list()
+        idcount2=list()
+        idcount3=list()
+        idcount4=list()
 
         signal_up_down = 1
         signal_left_right = 0
@@ -206,11 +211,16 @@ def create_ui():
             if ret:
                 count = count+1
                 if (count%8 == 0):
+                    # idcount1[idcount]=0
+                    # idcount2[idcount]=0
+                    # idcount3[idcount]=0
+                    # idcount4[idcount]=0
+                    # idcount+=1
                     idcount1=0
                     idcount2=0
                     idcount3=0
                     idcount4=0
-                    
+
                     # comment the next 8 lines to stop using model for testing purposes
 
                     result = model.predict(frame, confidence=40, overlap=30).json()
