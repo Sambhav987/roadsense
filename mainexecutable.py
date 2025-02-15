@@ -7,15 +7,15 @@ from roboflow import Roboflow
 import supervision as sv
 import time
 import serial
-
+import psycopg2
 
 # rf = Roboflow(api_key="Bv3XamEbiT5udMdycTT1")
 # project = rf.workspace().project("vehicle-detection-bz0yu")
 # model = project.version(4).model
 
-# rf = Roboflow(api_key="PVgUMg8Yz2wXAXLrBSEB")
-# project = rf.workspace().project("vehicle-detection-bz0yu")
-# model = project.version(4).model
+rf = Roboflow(api_key="PVgUMg8Yz2wXAXLrBSEB")
+project = rf.workspace().project("vehicle-detection-bz0yu")
+model = project.version(4).model
 
 max_time = 15
 min_time = 5
@@ -24,8 +24,7 @@ congestion_threshold = 20
 
 arduino_port = 'COM3' 
 baudrate = 9600
-# ser = serial.Serial(arduino_port, baudrate)
-
+ser = serial.Serial(arduino_port, baudrate)
 
 def create_ui():
     root = tk.Tk()
@@ -164,6 +163,69 @@ def create_ui():
     tl4 = create_traffic_light(quad_width // 2, screen_height - (quad_height // 2), d)
     tl3 = create_traffic_light(screen_width - (quad_width // 2), screen_height - (quad_height // 2), c)
 
+
+    def connectdb():
+        try:
+            conn = psycopg2.connect(
+            host= "localhost",
+            database="hackathon",
+            user="postgres",
+            password="password",
+            port="5432"
+        )
+            return conn
+        except Exception as e:
+            print(f"Error connecting to the database: {e}")
+        return None
+
+
+    def query():
+        conn = psycopg2.connect(
+            host= "localhost",
+            database="hackathon",
+            user="postgres",
+            password="password",
+            port="5432"
+        )
+
+        const = conn.cursor()
+
+        const.execute('''CREATE TABLE IF NOT EXISTS Congestion(Timestamp VARCHAR(25) PRIMARY KEY, noofcars INT);''')
+        const.execute('''CREATE TABLE IF NOT EXISTS Accidents(Timestamp VARCHAR(25) PRIMARY KEY, noofinstances INT);''')
+        conn.commit()
+        conn.close
+
+
+    def insert_congestion_data(conn, timestamp, noofcars):
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+            INSERT INTO Congestion (Timestamp, noofcars)
+            VALUES (%s, %s);""", (timestamp, noofcars))
+            conn.commit()
+            cur.close()
+            print(f"Inserted into Congestion: {timestamp}, {noofcars}")
+        except Exception as e:
+            print(f"Error inserting into Congestion: {e}")
+
+
+    def insert_accident_data(conn, timestamp, noofinstances):
+        try:
+            cur = conn.cursor()
+            cur.execute("""
+            INSERT INTO Accidents (Timestamp, noofinstances)
+            VALUES (%s, %s);""", (timestamp, noofinstances))
+            conn.commit()
+            cur.close()
+            print(f"Inserted into Accidents: {timestamp}, {noofinstances}")
+        except Exception as e:
+            print(f"Error inserting into Accidents: {e}")
+
+
+
+
+
+
     videos = {"TL": None, "TR": None, "BL": None, "BR": None}
     video_threads = {"TL": None, "TR": None, "BL": None, "BR": None}
     video_items = {"TL": None, "TR": None, "BL": None, "BR": None}
@@ -205,6 +267,8 @@ def create_ui():
         signal_up_down = 1
         signal_left_right = 0
 
+        elapsed_time_ud = 0
+        elapsed_time_lr = 0
         elapsed_time = 0
         start_time = round(time.time(), 2)
 
@@ -222,20 +286,20 @@ def create_ui():
 
                     # comment the next 8 lines to stop using model for testing purposes
 
-                    # result = model.predict(frame, confidence=40, overlap=30).json()
-                    # labels = [item["class"] for item in result["predictions"]]
-                    # detections = sv.Detections.from_inference(result)
+                    result = model.predict(frame, confidence=40, overlap=30).json()
+                    labels = [item["class"] for item in result["predictions"]]
+                    detections = sv.Detections.from_inference(result)
 
 
-                    # for oneid in detections:
-                    #     if section == "TL":
-                    #         idcount1 += 1
-                    #     if section == "TR":
-                    #         idcount2 += 1
-                    #     if section == "BR":
-                    #         idcount3 += 1
-                    #     if section == "BL":
-                    #         idcount4 += 1
+                    for oneid in detections:
+                        if section == "TL":
+                            idcount1 += 1
+                        if section == "TR":
+                            idcount2 += 1
+                        if section == "BR":
+                            idcount3 += 1
+                        if section == "BL":
+                            idcount4 += 1
 
                     # stop here
                     
@@ -243,6 +307,9 @@ def create_ui():
                     button_count_tr.config(text=str(idcount2))
                     button_count_br.config(text=str(idcount3))
                     button_count_bl.config(text=str(idcount4))
+
+                    if(max(idcount1, idcount2, idcount3, idcount4) > 7):
+                        insert_congestion_data(connectdb(), time.asctime(), max(idcount1, idcount2, idcount3, idcount4))
 
                     count1=idcount1
                     count2=idcount2
@@ -254,7 +321,7 @@ def create_ui():
 
 
 
-                    if (signal_left_right == 1):
+                    if (signal_left_right == 1 and section=="TL"):
                         print("inside 1st if")
                         print("signal_left_right", signal_left_right)
                         print("signal_up_down", signal_up_down)
@@ -268,48 +335,49 @@ def create_ui():
                             elapsed_time += (round(time.time(), 2) - start_time - elapsed_time)
                             print("increasing elapsed time. Now elapsed : ", elapsed_time)
                     else:
-                        print("inside 1st else")
-                        if ((count_left_right > (1.25 * count_up_down)) and (elapsed_time >= min_time)):
-                            print("inside second if of first else")
-                            print("signal_left_right", signal_left_right)
-                            print("signal_up_down", signal_up_down)
-                            signal_left_right = 1
-                            signal_up_down = 0
-                            elapsed_time = 0
-                            start_time = round(time.time(), 2)
+                        if(section=="TL"):
+                            print("inside 1st else")
+                            if ((count_left_right > (1.25 * count_up_down)) and (elapsed_time >= min_time)):
+                                print("inside second if of first else")
+                                print("signal_left_right", signal_left_right)
+                                print("signal_up_down", signal_up_down)
+                                signal_left_right = 1
+                                signal_up_down = 0
+                                elapsed_time = 0
+                                start_time = round(time.time(), 2)
 
-                        else:
-                            elapsed_time += (round(time.time(), 2) - start_time - elapsed_time)
-                            print("increasing elapsed time. Now elapsed : ", elapsed_time)
+                            else: 
+                                elapsed_time += (round(time.time(), 2) - start_time - elapsed_time)
+                                print("increasing elapsed time. Now elapsed : ", elapsed_time)
 
-                    if(elapsed_time > max_time):
+                    if(elapsed_time > max_time and section=="TL"):
                             elapsed_time = 0
                             start_time = round(time.time(), 2)
                             temp = signal_left_right
                             signal_left_right = signal_up_down
                             signal_up_down = temp
 
-                    # if ser.in_waiting > 0:
-                    #     button_no = int(ser.readline().decode('utf-8').rstrip())
-                    #     if ((button_no == 1 or button_no == 3) and (signal_left_right == 1)):
-                    #         if(elapsed_time > min_time and count_left_right < car_crossing_threshold):
-                    #             signal_left_right = 0
-                    #             signal_up_down = 1
-                    #             elapsed_time = 0
-                    #             start_time = round(time.time(), 2)
+                    if ser.in_waiting > 0:
+                        button_no = int(ser.readline().decode('utf-8').rstrip())
+                        if ((button_no == 1 or button_no == 3) and (signal_left_right == 1)):
+                            if(elapsed_time > min_time and count_left_right < car_crossing_threshold):
+                                signal_left_right = 0
+                                signal_up_down = 1
+                                elapsed_time = 0
+                                start_time = round(time.time(), 2)
 
-                    #     if ((button_no == 2 or button_no == 4) and (signal_up_down == 1)):
-                    #         if(elapsed_time > min_time and count_up_down < car_crossing_threshold):
-                    #             signal_left_right = 1
-                    #             signal_up_down = 0
-                    #             elapsed_time = 0
-                    #             start_time = round(time.time(), 2)
+                        if ((button_no == 2 or button_no == 4) and (signal_up_down == 1)):
+                            if(elapsed_time > min_time and count_up_down < car_crossing_threshold):
+                                signal_left_right = 1
+                                signal_up_down = 0
+                                elapsed_time = 0
+                                start_time = round(time.time(), 2)
                             
-
-                    b=d=signal_left_right
-                    a=c=signal_up_down
+                    if(section == "TL"):
+                        b=d=signal_left_right
+                        a=c=signal_up_down
                     
-                    if signal_up_down==0 and signal_left_right==1:
+                    if signal_up_down==0 and signal_left_right==1 and section == "TL":
                         canvas.itemconfig(tl1[1], fill="red")
                         canvas.itemconfig(tl3[1], fill="red")
                         canvas.itemconfig(tl2[3], fill="green")
@@ -320,7 +388,7 @@ def create_ui():
                         canvas.itemconfig(tl1[3], fill="black")
                         canvas.itemconfig(tl3[3], fill="black")
                         
-                    elif signal_up_down==1 and signal_left_right==0:
+                    elif signal_up_down==1 and signal_left_right==0 and section == "TL":
                         canvas.itemconfig(tl2[1], fill="red")
                         canvas.itemconfig(tl4[1], fill="red")
                         canvas.itemconfig(tl1[3], fill="green")
@@ -333,12 +401,12 @@ def create_ui():
 
                     # comment out the below 5 lines again for testing
 
-                    # label_annotator = sv.LabelAnnotator()
-                    # box_annotator = sv.BoxAnnotator()
+                    label_annotator = sv.LabelAnnotator()
+                    box_annotator = sv.BoxAnnotator()
 
-                    # # image = cv2.imread(frame)
-                    # annotated_image = box_annotator.annotate(scene=frame, detections=detections)
-                    # annotated_image = label_annotator.annotate(scene=annotated_image, detections=detections, labels=labels)   
+                    # image = cv2.imread(frame)
+                    annotated_image = box_annotator.annotate(scene=frame, detections=detections)
+                    annotated_image = label_annotator.annotate(scene=annotated_image, detections=detections, labels=labels)   
 
                     # stop here
 
@@ -460,21 +528,21 @@ def create_ui():
                             signal_left_right = signal_up_down
                             signal_up_down = temp
 
-                    # if ser.in_waiting > 0:
-                    #     button_no = int(ser.readline().decode('utf-8').rstrip())
-                    #     if ((button_no == 1 or button_no == 3) and (signal_left_right == 1)):
-                    #         if(elapsed_time > min_time and count_left_right < car_crossing_threshold):
-                    #             signal_left_right = 0
-                    #             signal_up_down = 1
-                    #             elapsed_time = 0
-                    #             start_time = round(time.time(), 2)
+                    if ser.in_waiting > 0:
+                        button_no = int(ser.readline().decode('utf-8').rstrip())
+                        if ((button_no == 1 or button_no == 3) and (signal_left_right == 1)):
+                            if(elapsed_time > min_time and count_left_right < car_crossing_threshold):
+                                signal_left_right = 0
+                                signal_up_down = 1
+                                elapsed_time = 0
+                                start_time = round(time.time(), 2)
 
-                    #     if ((button_no == 2 or button_no == 4) and (signal_up_down == 1)):
-                    #         if(elapsed_time > min_time and count_up_down < car_crossing_threshold):
-                    #             signal_left_right = 1
-                    #             signal_up_down = 0
-                    #             elapsed_time = 0
-                    #             start_time = round(time.time(), 2)
+                        if ((button_no == 2 or button_no == 4) and (signal_up_down == 1)):
+                            if(elapsed_time > min_time and count_up_down < car_crossing_threshold):
+                                signal_left_right = 1
+                                signal_up_down = 0
+                                elapsed_time = 0
+                                start_time = round(time.time(), 2)
                             
 
                     b=d=signal_left_right
