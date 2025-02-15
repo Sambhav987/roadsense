@@ -6,17 +6,26 @@ import threading
 from roboflow import Roboflow
 import supervision as sv
 import time
+import serial
+
 
 # rf = Roboflow(api_key="Bv3XamEbiT5udMdycTT1")
 # project = rf.workspace().project("vehicle-detection-bz0yu")
 # model = project.version(4).model
 
-rf = Roboflow(api_key="PVgUMg8Yz2wXAXLrBSEB")
-project = rf.workspace().project("vehicle-detection-bz0yu")
-model = project.version(4).model
+# rf = Roboflow(api_key="PVgUMg8Yz2wXAXLrBSEB")
+# project = rf.workspace().project("vehicle-detection-bz0yu")
+# model = project.version(4).model
 
 max_time = 15
 min_time = 5
+car_crossing_threshold = 10
+congestion_threshold = 20
+
+arduino_port = 'COM3' 
+baudrate = 9600
+# ser = serial.Serial(arduino_port, baudrate)
+
 
 def create_ui():
     root = tk.Tk()
@@ -152,8 +161,8 @@ def create_ui():
 
     tl1 = create_traffic_light(quad_width // 2, quad_height // 2, a)
     tl2 = create_traffic_light(screen_width - (quad_width // 2), quad_height // 2, b)
-    tl3 = create_traffic_light(quad_width // 2, screen_height - (quad_height // 2), c)
-    tl4 = create_traffic_light(screen_width - (quad_width // 2), screen_height - (quad_height // 2), d)
+    tl4 = create_traffic_light(quad_width // 2, screen_height - (quad_height // 2), d)
+    tl3 = create_traffic_light(screen_width - (quad_width // 2), screen_height - (quad_height // 2), c)
 
     videos = {"TL": None, "TR": None, "BL": None, "BR": None}
     video_threads = {"TL": None, "TR": None, "BL": None, "BR": None}
@@ -180,7 +189,7 @@ def create_ui():
                     y = screen_height - (quad_height // 2)
                 video_items[section] = canvas.create_image(x, y, anchor='center', tags='video')
                 thread = threading.Thread(target=play_video, args=(section,))
-                thread.daemon = True
+                thread.daemon = False
                 video_threads[section] = thread
                 thread.start()
 
@@ -192,11 +201,6 @@ def create_ui():
         count2=0
         count3=0
         count4=0
-        idcount=0
-        idcount1=list()
-        idcount2=list()
-        idcount3=list()
-        idcount4=list()
 
         signal_up_down = 1
         signal_left_right = 0
@@ -211,32 +215,27 @@ def create_ui():
             if ret:
                 count = count+1
                 if (count%8 == 0):
-                    # idcount1[idcount]=0
-                    # idcount2[idcount]=0
-                    # idcount3[idcount]=0
-                    # idcount4[idcount]=0
-                    # idcount+=1
                     idcount1=0
-                    idcount2=0
+                    idcount2=1
                     idcount3=0
                     idcount4=0
 
                     # comment the next 8 lines to stop using model for testing purposes
 
-                    result = model.predict(frame, confidence=40, overlap=30).json()
-                    labels = [item["class"] for item in result["predictions"]]
-                    detections = sv.Detections.from_inference(result)
+                    # result = model.predict(frame, confidence=40, overlap=30).json()
+                    # labels = [item["class"] for item in result["predictions"]]
+                    # detections = sv.Detections.from_inference(result)
 
 
-                    for oneid in detections:
-                        if section == "TL":
-                            idcount1 += 1
-                        if section == "TR":
-                            idcount2 += 1
-                        if section == "BR":
-                            idcount3 += 1
-                        if section == "BL":
-                            idcount4 += 1
+                    # for oneid in detections:
+                    #     if section == "TL":
+                    #         idcount1 += 1
+                    #     if section == "TR":
+                    #         idcount2 += 1
+                    #     if section == "BR":
+                    #         idcount3 += 1
+                    #     if section == "BL":
+                    #         idcount4 += 1
 
                     # stop here
                     
@@ -290,6 +289,23 @@ def create_ui():
                             signal_left_right = signal_up_down
                             signal_up_down = temp
 
+                    # if ser.in_waiting > 0:
+                    #     button_no = int(ser.readline().decode('utf-8').rstrip())
+                    #     if ((button_no == 1 or button_no == 3) and (signal_left_right == 1)):
+                    #         if(elapsed_time > min_time and count_left_right < car_crossing_threshold):
+                    #             signal_left_right = 0
+                    #             signal_up_down = 1
+                    #             elapsed_time = 0
+                    #             start_time = round(time.time(), 2)
+
+                    #     if ((button_no == 2 or button_no == 4) and (signal_up_down == 1)):
+                    #         if(elapsed_time > min_time and count_up_down < car_crossing_threshold):
+                    #             signal_left_right = 1
+                    #             signal_up_down = 0
+                    #             elapsed_time = 0
+                    #             start_time = round(time.time(), 2)
+                            
+
                     b=d=signal_left_right
                     a=c=signal_up_down
                     
@@ -317,12 +333,12 @@ def create_ui():
 
                     # comment out the below 5 lines again for testing
 
-                    label_annotator = sv.LabelAnnotator()
-                    box_annotator = sv.BoxAnnotator()
+                    # label_annotator = sv.LabelAnnotator()
+                    # box_annotator = sv.BoxAnnotator()
 
-                    # image = cv2.imread(frame)
-                    annotated_image = box_annotator.annotate(scene=frame, detections=detections)
-                    annotated_image = label_annotator.annotate(scene=annotated_image, detections=detections, labels=labels)
+                    # # image = cv2.imread(frame)
+                    # annotated_image = box_annotator.annotate(scene=frame, detections=detections)
+                    # annotated_image = label_annotator.annotate(scene=annotated_image, detections=detections, labels=labels)   
 
                     # stop here
 
@@ -330,6 +346,8 @@ def create_ui():
                     frame = cv2.resize(frame, (quad_width, quad_height))
                     img = Image.fromarray(frame)
                     imgtk = ImageTk.PhotoImage(image=img)
+                    
+
                     def update_frame():
                         if video_items[section]:
                             canvas.itemconfig(video_items[section], image=imgtk)
@@ -344,6 +362,179 @@ def create_ui():
                 cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
         cap.release()
+
+
+    def play_video_tr(section):
+        cap = videos[section]
+
+        count = 0
+        count1=0
+        count2=0
+        count3=0
+        count4=0
+
+        signal_up_down = 1
+        signal_left_right = 0
+
+        elapsed_time = 0
+        start_time = round(time.time(), 2)
+
+        while cap.isOpened() and not stop_threads[section]:
+            ret, frame = cap.read()
+            
+
+            if ret:
+                count = count+1
+                if (count%8 == 0):
+                    idcount1=0
+                    idcount2=1
+                    idcount3=0
+                    idcount4=0
+
+                    # comment the next 8 lines to stop using model for testing purposes
+
+                    # result = model.predict(frame, confidence=40, overlap=30).json()
+                    # labels = [item["class"] for item in result["predictions"]]
+                    # detections = sv.Detections.from_inference(result)
+
+
+                    # for oneid in detections:
+                    #     if section == "TL":
+                    #         idcount1 += 1
+                    #     if section == "TR":
+                    #         idcount2 += 1
+                    #     if section == "BR":
+                    #         idcount3 += 1
+                    #     if section == "BL":
+                    #         idcount4 += 1
+
+                    # stop here
+                    
+                    button_count_tl.config(text=str(idcount1))
+                    button_count_tr.config(text=str(idcount2))
+                    button_count_br.config(text=str(idcount3))
+                    button_count_bl.config(text=str(idcount4))
+
+                    count1=idcount1
+                    count2=idcount2
+                    count3=idcount3
+                    count4=idcount4
+
+                    count_up_down = count1 + count3
+                    count_left_right = count2 + count4
+
+
+
+                    if (signal_left_right == 1):
+                        print("inside 1st if")
+                        print("signal_left_right", signal_left_right)
+                        print("signal_up_down", signal_up_down)
+                        if ((count_up_down > (1.25 * count_left_right)) and (elapsed_time >= min_time)):
+                            signal_left_right = 0
+                            signal_up_down = 1
+                            elapsed_time = 0
+                            start_time = round(time.time(), 2)
+                            print("inside 2nd if")
+                        else:
+                            elapsed_time += (round(time.time(), 2) - start_time - elapsed_time)
+                            print("increasing elapsed time. Now elapsed : ", elapsed_time)
+                    else:
+                        print("inside 1st else")
+                        if ((count_left_right > (1.25 * count_up_down)) and (elapsed_time >= min_time)):
+                            print("inside second if of first else")
+                            print("signal_left_right", signal_left_right)
+                            print("signal_up_down", signal_up_down)
+                            signal_left_right = 1
+                            signal_up_down = 0
+                            elapsed_time = 0
+                            start_time = round(time.time(), 2)
+
+                        else:
+                            elapsed_time += (round(time.time(), 2) - start_time - elapsed_time)
+                            print("increasing elapsed time. Now elapsed : ", elapsed_time)
+
+                    if(elapsed_time > max_time):
+                            elapsed_time = 0
+                            start_time = round(time.time(), 2)
+                            temp = signal_left_right
+                            signal_left_right = signal_up_down
+                            signal_up_down = temp
+
+                    # if ser.in_waiting > 0:
+                    #     button_no = int(ser.readline().decode('utf-8').rstrip())
+                    #     if ((button_no == 1 or button_no == 3) and (signal_left_right == 1)):
+                    #         if(elapsed_time > min_time and count_left_right < car_crossing_threshold):
+                    #             signal_left_right = 0
+                    #             signal_up_down = 1
+                    #             elapsed_time = 0
+                    #             start_time = round(time.time(), 2)
+
+                    #     if ((button_no == 2 or button_no == 4) and (signal_up_down == 1)):
+                    #         if(elapsed_time > min_time and count_up_down < car_crossing_threshold):
+                    #             signal_left_right = 1
+                    #             signal_up_down = 0
+                    #             elapsed_time = 0
+                    #             start_time = round(time.time(), 2)
+                            
+
+                    b=d=signal_left_right
+                    a=c=signal_up_down
+                    
+                    if signal_up_down==0 and signal_left_right==1:
+                        canvas.itemconfig(tl1[1], fill="red")
+                        canvas.itemconfig(tl3[1], fill="red")
+                        canvas.itemconfig(tl2[3], fill="green")
+                        canvas.itemconfig(tl4[3], fill="green")
+
+                        canvas.itemconfig(tl2[1], fill="black")
+                        canvas.itemconfig(tl4[1], fill="black")
+                        canvas.itemconfig(tl1[3], fill="black")
+                        canvas.itemconfig(tl3[3], fill="black")
+                        
+                    elif signal_up_down==1 and signal_left_right==0:
+                        canvas.itemconfig(tl2[1], fill="red")
+                        canvas.itemconfig(tl4[1], fill="red")
+                        canvas.itemconfig(tl1[3], fill="green")
+                        canvas.itemconfig(tl3[3], fill="green")
+
+                        canvas.itemconfig(tl1[1], fill="black")
+                        canvas.itemconfig(tl3[1], fill="black")
+                        canvas.itemconfig(tl2[3], fill="black")
+                        canvas.itemconfig(tl4[3], fill="black")
+
+                    # comment out the below 5 lines again for testing
+
+                    # label_annotator = sv.LabelAnnotator()
+                    # box_annotator = sv.BoxAnnotator()
+
+                    # # image = cv2.imread(frame)
+                    # annotated_image = box_annotator.annotate(scene=frame, detections=detections)
+                    # annotated_image = label_annotator.annotate(scene=annotated_image, detections=detections, labels=labels)   
+
+                    # stop here
+
+                    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                    frame = cv2.resize(frame, (quad_width, quad_height))
+                    img = Image.fromarray(frame)
+                    imgtk = ImageTk.PhotoImage(image=img)
+                    
+
+                    def update_frame():
+                        if video_items[section]:
+                            canvas.itemconfig(video_items[section], image=imgtk)
+                            canvas.image_dict[section] = imgtk   
+                            canvas.tag_raise('traffic_light')
+                            canvas.tag_raise('square')
+                            for exclamation in exclamations.values():
+                                canvas.tag_raise(exclamation)
+                    root.after(0, update_frame)
+
+            else:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+        cap.release()
+
+
 
     def remove_video(section):
         if videos[section]:
