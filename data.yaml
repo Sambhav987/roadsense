@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 9
+names: ['accident', 'ambulance_active', 'ambulance_nonactive', 'firetruck_active', 'firetruck_nonactive', 'normal_car', 'person', 'police_active', 'police_nonactive']
+
+roboflow:
+  workspace: sambhav
+  project: smart-traffic-pj0fk
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/sambhav/smart-traffic-pj0fk/dataset/1
