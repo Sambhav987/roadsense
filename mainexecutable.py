@@ -8,10 +8,8 @@ import supervision as sv
 import time
 import serial
 import psycopg2
-
-# rf = Roboflow(api_key="Bv3XamEbiT5udMdycTT1")
-# project = rf.workspace().project("vehicle-detection-bz0yu")
-# model = project.version(4).model
+import smtplib
+from email.message import EmailMessage
 
 rf = Roboflow(api_key="PVgUMg8Yz2wXAXLrBSEB")
 project = rf.workspace().project("vehicle-detection-bz0yu")
@@ -19,10 +17,10 @@ model = project.version(4).model
 
 max_time = 15
 min_time = 5
-car_crossing_threshold = 10
-congestion_threshold = 20
+car_crossing_threshold = 100
+congestion_threshold = 7
 
-arduino_port = 'COM3' 
+arduino_port = 'COM9'
 baudrate = 9600
 ser = serial.Serial(arduino_port, baudrate)
 
@@ -170,7 +168,7 @@ def create_ui():
             host= "localhost",
             database="hackathon",
             user="postgres",
-            password="password",
+            password="grey69",
             port="5432"
         )
             return conn
@@ -184,7 +182,7 @@ def create_ui():
             host= "localhost",
             database="hackathon",
             user="postgres",
-            password="password",
+            password="grey69",
             port="5432"
         )
 
@@ -207,7 +205,18 @@ def create_ui():
             print(f"Inserted into Congestion: {timestamp}, {noofcars}")
         except Exception as e:
             print(f"Error inserting into Congestion: {e}")
+        user = "demo69lemonade@gmail.com"
+        password = "njtfjabmchkgqdkr"  # Use app password if 2FA is enabled
 
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(user, password)
+        msg = EmailMessage()
+        msg.set_content(f"Hello, a congestion has been detected with {noofcars} at {timestamp}")
+        msg['from'] = user
+        msg['to'] = "adityaimpgupta18@gmail.com"
+        msg['subject'] = f"Congestion detected at {timestamp}"
+        server.send_message(msg)
 
     def insert_accident_data(conn, timestamp, noofinstances):
         try:
@@ -220,9 +229,6 @@ def create_ui():
             print(f"Inserted into Accidents: {timestamp}, {noofinstances}")
         except Exception as e:
             print(f"Error inserting into Accidents: {e}")
-
-
-
 
 
 
@@ -280,7 +286,7 @@ def create_ui():
                 count = count+1
                 if (count%8 == 0):
                     idcount1=0
-                    idcount2=1
+                    idcount2=0
                     idcount3=0
                     idcount4=0
 
@@ -308,7 +314,7 @@ def create_ui():
                     button_count_br.config(text=str(idcount3))
                     button_count_bl.config(text=str(idcount4))
 
-                    if(max(idcount1, idcount2, idcount3, idcount4) > 7):
+                    if(max(idcount1, idcount2, idcount3, idcount4) > congestion_threshold):
                         insert_congestion_data(connectdb(), time.asctime(), max(idcount1, idcount2, idcount3, idcount4))
 
                     count1=idcount1
@@ -360,14 +366,14 @@ def create_ui():
                     if ser.in_waiting > 0:
                         button_no = int(ser.readline().decode('utf-8').rstrip())
                         if ((button_no == 1 or button_no == 3) and (signal_left_right == 1)):
-                            if(elapsed_time > min_time and count_left_right < car_crossing_threshold):
+                            if(elapsed_time > min_time):
                                 signal_left_right = 0
                                 signal_up_down = 1
                                 elapsed_time = 0
                                 start_time = round(time.time(), 2)
 
                         if ((button_no == 2 or button_no == 4) and (signal_up_down == 1)):
-                            if(elapsed_time > min_time and count_up_down < car_crossing_threshold):
+                            if(elapsed_time > min_time):
                                 signal_left_right = 1
                                 signal_up_down = 0
                                 elapsed_time = 0
